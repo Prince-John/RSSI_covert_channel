@@ -3,10 +3,30 @@ import numpy as np
 import time
 from matplotlib import pyplot as plt
 import threading
+import argparse
 from progress.spinner import Spinner
 
 
+parser = argparse.ArgumentParser(description='Data for this program.')
+
+parser.add_argument('--tim', action='store', type=int, default=10,
+                    help='time for data aqusition in seconds')
+
+parser.add_argument('--rate', action='store', type=int, default=150,
+                    help='rate of sample collection in samples per sec, default is 150 Hz')
+parser.add_argument('--dest', action='store', type=str, default='data.txt',
+                    help='destination location for data to be written to file.')
+parser.add_argument('--debug', action='store_true', 
+                    help='specifies if debug statements are printed')
+args = parser.parse_args()
+
+
+
+
+
 def movingAvg(arr, position, numvals=50, wrap=0):
+    # This function has been reused from sample code provided for ESE 205 course with permission from Dr.James Feher 
+
     # default to 3 pt moving average with wrap around on getting values 
     # arr       - array
     # posistion - start from this point on averages
@@ -39,7 +59,7 @@ def read_level():
     f.close()
     return float(level)
 
-def poll(tim = 1, rate =500):
+def poll(tim = 10, rate =500):
     """Rate is the sampling rate, default set to 500 Hz; Time is sampling time in seconds, default 10 sec"""
     length = rate*tim
     data_in = np.zeros(length, dtype = float) 
@@ -63,11 +83,7 @@ def poll(tim = 1, rate =500):
         #print(f'loop time = {(time.time()-s_time)}')
         ctr+=1
 
-    #print(f's = {s_time}')
-    #sum = 0
-    #for i in range(1000):
-      #  sum += s1_time[i]
-    #print(sum/1000)
+
     return data_in
 
 
@@ -96,17 +112,17 @@ def waiting():
 stop_threads = False
 t1 = threading.Thread(target = waiting)
 t1.start()
-data = poll(120,150)
+data = poll(args.tim,args.rate)
+
 stop_threads = True
 t1.join()
 
 
-print(data.shape)
-print("Moving Avg")
+
 avg_data = my_movAvg(data)
 
 
-f = open(r'data1.txt', 'w')
+f = open(args.dest, 'w')
 time = [0]*len(data)
 for i in range(len(data)):
     time[i]=i
@@ -122,5 +138,3 @@ fig = plt.figure()
 plt.plot(time, data)
 plt.plot(time, avg_data)
 plt.show()
-
-f = open(r'data.txt', 'w')

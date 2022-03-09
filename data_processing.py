@@ -1,12 +1,32 @@
-from email.mime import base
-from tkinter.tix import Tree
+from tkinter import font
 import numpy as np
 from matplotlib import pyplot as plt
+import argparse
 
-debug = True
 
 
-with open(r'data1.txt', 'r') as f:
+
+
+
+
+
+parser = argparse.ArgumentParser(description='Data for this program.')
+
+parser.add_argument('--v', action='store_true',
+                    help='verbose debug statements')
+parser.add_argument('--source', action='store', type=str, default=r'data.txt',
+                    help='source location for data to be read from.')
+parser.add_argument('--debug', action='store_true', 
+                    help='specifies if debug statements are printed')
+args = parser.parse_args()
+
+
+
+with open(args.source, 'r') as f:
+
+
+
+
     lines = f.readlines()
 
     data = [0]*len(lines)
@@ -30,8 +50,8 @@ def edge(arr, loc,  thresh, detect_width = 100, debug =False):
     s1 = sum(arr[loc-detect_width:loc])/detect_width
     s2 = sum(arr[loc:loc+detect_width])/detect_width
     
-    if debug: print(f's1: {s1}, s2: {s2}, loc: {loc}')
-    if abs(s1-s2)>thresh:
+    if debug: print(f's1: {s1}, s2: {s2}, loc: {loc}, {abs(s1-s2)>thresh}')
+    if abs(s1-s2)>=thresh:
         return True
     return False
 
@@ -50,11 +70,11 @@ thresh = -63
 
 
 
-def find_pulses(data):
+def find_pulses(data, debug = False, detect_width= 50):
     edge_loc = [0]*len(data)
     for i in range(len(data)):
         
-        if edge(data, i,3, detect_width= 50):
+        if edge(data, i,1, detect_width, debug= debug):
             edge_loc[i] = 1
     return edge_loc
 
@@ -75,7 +95,7 @@ def locate_sync(data, debug = False):
     bit_length = [] 
     bit_count = 0
     baseline_level = 0
-
+    avg_bit_len = 0
     for i in range(len(data)):
         if bit_state <= 1:
 
@@ -83,11 +103,19 @@ def locate_sync(data, debug = False):
                 bit_state = 1
             elif data[i] == 1 and (data[i+1] == 0 and data[i+2] == 0 and data[i+2] == 0):
                                 
-                if falling_edge_pos != 0: bit_length.append(i-falling_edge_pos)
-                
+                if falling_edge_pos != 0: 
+                    bit_length.append(i-falling_edge_pos)
+        
+                    if max(bit_length) > 1.7*sum(bit_length)/len(bit_length):#removes any bit lengths longer than 1.7 times the average. Used to remove obviously incorrect readings due to noise artifacts. 
+                        bit_length.remove(max(bit_length))
+                        bit_count -=1
+        
+        
                 falling_edge_pos=i
 
                 bit_count += 1
+                
+
                 if bit_count == 10: 
                     bit_state = 2
                     avg_bit_len = sum(bit_length)/len(bit_length)
@@ -100,6 +128,8 @@ def locate_sync(data, debug = False):
     if debug: print(f'Avg bit length: {avg_bit_len} ')
 
     return round(avg_bit_len), baseline_level
+
+
 
 
 def baseline_reading(bit_len, baseline_start, edge_data, data, debug = False):
@@ -124,7 +154,7 @@ def baseline_reading(bit_len, baseline_start, edge_data, data, debug = False):
 def discretize_stream(pulses, data, thresh, debug = False):
 
 
-    count = 0
+    count = 1
     last_edge = 0
     bit_stream = []
     for i in range(len(pulses)):
@@ -226,20 +256,27 @@ def decrypt(message):
 
 
 
+debug = args.debug or args.v
 
-
-debug = False   
 
 
 pulses = find_pulses(data)
-bit_len, baseline_start = locate_sync(pulses, debug= debug)
+bit_len, baseline_start = locate_sync(pulses, debug= args.debug)
 thresh = baseline_reading(bit_len, baseline_start, pulses, data, debug= debug)
-discrete_stream = discretize_stream(pulses, data, thresh, debug= False)
+discrete_stream = discretize_stream(pulses, data, thresh, debug = args.v)
+
+pulses1 = find_pulses(discrete_stream, debug = args.v, detect_width= 2)
+
+bit_len1, baseline_start1 = locate_sync(pulses1, args.v)
 
 bit_stream = generate_bitstream(discrete_stream, bit_len, baseline_start)
+bit_stream1 = generate_bitstream(discrete_stream, bit_len1, baseline_start1)
 print(bit_stream)
-print(decrypt(bit_stream))
-
+print(bit_stream1)
+try:
+    print(decrypt(bit_stream1))
+except ValueError:
+    print('Error')
 
 
 
@@ -249,11 +286,15 @@ print(decrypt(bit_stream))
 
 fig = plt.figure()
 plt.subplot(3,1,3)
+plt.title('Discrete Stream',fontsize =17)
 plt.plot(discrete_stream)
 plt.subplot(3,1,1)
+plt.title('Signal Moving Average',fontsize =17)
 plt.plot(time, data)
 plt.subplot(3,1,2)
-plt.stem(pulses, use_line_collection=True)
+plt.title('Detected Edges',fontsize =17)
+
+plt.stem(pulses1, use_line_collection=True)
 plt.show()
 
 
